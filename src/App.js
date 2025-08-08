@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
+import {applyFilters, getFilterSummary } from "./filterUtils";
 import "./App.css";
 
 function App() {
   const [feeds, setFeeds] = useState([]);
   const [allFeeds, setAllFeeds] = useState([]); // Store all feeds for filtering
   const [loading, setLoading] = useState(true);
+  const [updatingFeeds, setUpdatingFeeds] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [rssSources, setRssSources] = useState([]); // TODO: Fetch from backend
   const [newRssUrl, setNewRssUrl] = useState("");
+  const [newRssName, setNewRssName] = useState("");
   
   // Filter states
   const [selectedSources, setSelectedSources] = useState([]);
@@ -41,142 +44,119 @@ function App() {
     }
   };
 
-  // Function to get unique sources from feeds
-  const getUniqueSources = (feeds) => {
-    const sources = feeds.reduce((acc, feed) => {
-      if (!acc.find(source => source.name === feed.source)) {
-        acc.push({ id: feed.source, name: feed.source, url: feed.source });
-      }
-      return acc;
-    }, []);
-    return sources;
-  };
 
-  // Function to check if a date is within the specified time range
-  const isDateInRange = (dateString, timeFilter, startDate, endDate) => {
+
+  // Fetch current RSS sources from backend
+  const fetchRssSources = async () => {
     try {
-      const articleDate = new Date(dateString);
-      if (isNaN(articleDate.getTime())) return true; // Include if date is invalid
-      
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
-      switch (timeFilter) {
-        case 'today':
-          const articleDay = new Date(articleDate.getFullYear(), articleDate.getMonth(), articleDate.getDate());
-          return articleDay.getTime() === today.getTime();
-        
-        case 'week':
-          const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-          return articleDate >= weekAgo;
-        
-        case 'month':
-          const monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
-          return articleDate >= monthAgo;
-        
-        case 'custom':
-          if (startDate && endDate) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999); // Include the entire end date
-            return articleDate >= start && articleDate <= end;
-          }
-          return true;
-        
-        default:
-          return true; // 'all' - include everything
+      console.log("Fetching RSS sources from: https://rss-backend-3jhv.onrender.com/list_feeds");
+      const response = await fetch("https://rss-backend-3jhv.onrender.com/list_feeds");
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      const sources = await response.json();
+      console.log("Fetched RSS sources:", sources);
+      console.log("Sources count:", sources.length);
+      
+      if (!Array.isArray(sources)) {
+        console.error("Sources data is not an array:", typeof sources);
+        setRssSources([]);
+        return;
+      }
+      
+      setRssSources(sources);
     } catch (error) {
-      console.error('Error checking date range:', error);
-      return true; // Include if there's an error
+      console.error("Error fetching RSS sources:", error);
+      console.error("Error details:", error.message);
+      setRssSources([]);
     }
   };
 
-  // Function to apply filters to feeds
-  const applyFilters = (feeds, filters) => {
-    return feeds.filter(feed => {
-      // Filter by source
-      if (filters.sources && filters.sources.length > 0) {
-        if (!filters.sources.includes(feed.source)) {
-          return false;
-        }
-      }
+  // Add new RSS source
+  const addRssSource = async (url, name) => {
+    try {
+      // Use provided name or extract from URL if not provided
+      const feedName = name || new URL(url).hostname;
       
-      // Filter by time
-      if (filters.timeFilter && filters.timeFilter !== 'all') {
-        if (!isDateInRange(feed.published, filters.timeFilter, filters.startDate, filters.endDate)) {
-          return false;
-        }
-      }
+      const response = await fetch(`https://rss-backend-3jhv.onrender.com/add_feed?name=${encodeURIComponent(feedName)}&url=${encodeURIComponent(url)}`, {
+        method: 'POST'
+      });
       
-      return true;
-    });
+      if (response.ok) {
+        console.log("Successfully added RSS source:", url);
+        setNewRssUrl("");
+        setNewRssName("");
+        fetchRssSources(); // Refresh the sources list
+        fetchFeeds(); // Refresh feeds
+      } else {
+        console.error("Failed to add RSS source:", response.status);
+      }
+    } catch (error) {
+      console.error("Error adding RSS source:", error);
+    }
   };
 
-  // TODO: Implement API call to fetch current RSS sources
-  const fetchRssSources = async () => {
-    // TODO: GET /api/rss-sources
-    // const response = await fetch("http://127.0.0.1:8000/api/rss-sources");
-    // const sources = await response.json();
-    // setRssSources(sources);
-    console.log("TODO: Fetch RSS sources from backend");
-  };
-
-  // TODO: Implement API call to add new RSS source
-  const addRssSource = async (url) => {
-    // TODO: POST /api/rss-sources
-    // const response = await fetch("http://127.0.0.1:8000/api/rss-sources", {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ url: url })
-    // });
-    // if (response.ok) {
-    //   setNewRssUrl("");
-    //   fetchRssSources();
-    //   fetchFeeds(); // Refresh feeds
-    // }
-    console.log("TODO: Add RSS source:", url);
-  };
-
-  // TODO: Implement API call to delete RSS source
-  const deleteRssSource = async (id) => {
-    // TODO: DELETE /api/rss-sources/{id}
-    // const response = await fetch(`http://127.0.0.1:8000/api/rss-sources/${id}`, {
-    //   method: 'DELETE'
-    // });
-    // if (response.ok) {
-    //   fetchRssSources();
-    //   fetchFeeds(); // Refresh feeds
-    // }
-    console.log("TODO: Delete RSS source:", id);
+  // Delete RSS source
+  const deleteRssSource = async (name) => {
+    try {
+      const response = await fetch(`https://rss-backend-3jhv.onrender.com/remove_feed?name=${encodeURIComponent(name)}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        console.log("Successfully deleted RSS source:", name);
+        fetchRssSources(); // Refresh the sources list
+        fetchFeeds(); // Refresh feeds
+      } else {
+        console.error("Failed to delete RSS source:", response.status);
+      }
+    } catch (error) {
+      console.error("Error deleting RSS source:", error);
+    }
   };
 
   const fetchFeeds = async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/feeds");
+      console.log("Fetching articles from: https://rss-backend-3jhv.onrender.com/feeds");
+      const response = await fetch("https://rss-backend-3jhv.onrender.com/feeds");
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
+      console.log("Received articles data:", data);
+      console.log("Articles count:", data.length);
+      
+      if (!Array.isArray(data)) {
+        console.error("Articles data is not an array:", typeof data);
+        setAllFeeds([]);
+        setFeeds([]);
+        setLoading(false);
+        return;
+      }
+      
       setAllFeeds(data); // Store all feeds
       setFeeds(data); // Initially show all feeds
       setLoading(false);
-      
-      // Extract unique sources from feeds for filtering
-      const sources = getUniqueSources(data);
-      setRssSources(sources);
     } catch (err) {
       console.error("Error fetching feeds:", err);
+      console.error("Error details:", err.message);
+      setAllFeeds([]);
+      setFeeds([]);
       setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchFeeds();
-    fetchRssSources(); // TODO: Uncomment when API is ready
+    fetchRssSources(); // Fetch RSS sources from backend
   }, []);
 
   const handleAddRssSource = (e) => {
     e.preventDefault();
     if (newRssUrl.trim()) {
-      addRssSource(newRssUrl.trim());
+      addRssSource(newRssUrl.trim(), newRssName.trim());
     }
   };
 
@@ -206,26 +186,35 @@ function App() {
     setFeeds(allFeeds); // Reset to show all feeds
   };
 
-  const handleSourceToggle = (sourceId) => {
+  const handleSourceToggle = (sourceName) => {
     setSelectedSources(prev => 
-      prev.includes(sourceId) 
-        ? prev.filter(id => id !== sourceId)
-        : [...prev, sourceId]
+      prev.includes(sourceName) 
+        ? prev.filter(name => name !== sourceName)
+        : [...prev, sourceName]
     );
   };
 
-  const getFilterSummary = () => {
-    if (Object.keys(appliedFilters).length === 0) return null;
-    
-    const parts = [];
-    if (appliedFilters.sources && appliedFilters.sources.length > 0) {
-      parts.push(`${appliedFilters.sources.length} source(s)`);
+  // Manually trigger backend to update feeds
+  const updateFeeds = async () => {
+    try {
+      setUpdatingFeeds(true);
+      console.log("Triggering feed update at: https://rss-backend-3jhv.onrender.com/update_feeds");
+      const response = await fetch("https://rss-backend-3jhv.onrender.com/update_feeds", {
+        method: 'POST'
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      // After successful update, refresh feeds list
+      await fetchFeeds();
+    } catch (error) {
+      console.error("Error updating feeds:", error);
+    } finally {
+      setUpdatingFeeds(false);
     }
-    if (appliedFilters.timeFilter && appliedFilters.timeFilter !== 'all') {
-      parts.push(appliedFilters.timeFilter);
-    }
-    return parts.join(', ');
   };
+
+
 
   if (loading) {
     return (
@@ -247,9 +236,17 @@ function App() {
           >
             <span className="filter-icon">🔍</span>
             Filter
-            {getFilterSummary() && (
-              <span className="filter-badge">{getFilterSummary()}</span>
+            {getFilterSummary(appliedFilters) && (
+              <span className="filter-badge">{getFilterSummary(appliedFilters)}</span>
             )}
+          </button>
+          <button 
+            className="manage-sources-btn"
+            onClick={updateFeeds}
+            disabled={updatingFeeds}
+            title="Fetch latest articles from all sources"
+          >
+            {updatingFeeds ? 'Updating…' : 'Update Feeds'}
           </button>
           <button 
             className="manage-sources-btn"
@@ -281,9 +278,9 @@ function App() {
                   </a>
                 </h2>
                 <div className="article-meta">
-                  <span className="publisher">{item.source}</span>
-                  <span className="publish-time" title={item.published}>
-                    {formatLocalTime(item.published)}
+                  <span className="publisher">{item.user_name}</span>
+                  <span className="publish-time" title={item.timestamp}>
+                    {formatLocalTime(item.timestamp)}
                   </span>
                 </div>
               </div>
@@ -315,7 +312,7 @@ function App() {
                   ) : (
                     <div className="checkbox-group">
                       {rssSources.map((source) => (
-                        <label key={source.id} className="checkbox-label">
+                        <label key={source.name} className="checkbox-label">
                           <input
                             type="checkbox"
                             checked={selectedSources.includes(source.name)}
@@ -450,6 +447,13 @@ function App() {
             <div className="modal-body">
               <form onSubmit={handleAddRssSource} className="add-source-form">
                 <input
+                  type="text"
+                  placeholder="Enter feed name (optional)"
+                  value={newRssName}
+                  onChange={(e) => setNewRssName(e.target.value)}
+                  className="rss-name-input"
+                />
+                <input
                   type="url"
                   placeholder="Enter RSS feed URL"
                   value={newRssUrl}
@@ -469,11 +473,11 @@ function App() {
                 ) : (
                   <ul>
                     {rssSources.map((source) => (
-                      <li key={source.id} className="source-item">
+                      <li key={source.name} className="source-item">
                         <span className="source-url">{source.name}</span>
                         <button 
                           className="delete-btn"
-                          onClick={() => deleteRssSource(source.id)}
+                          onClick={() => deleteRssSource(source.name)}
                         >
                           Delete
                         </button>
