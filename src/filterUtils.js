@@ -7,8 +7,8 @@
  */
 export const getUniqueSources = (feeds) => {
   const sources = feeds.reduce((acc, feed) => {
-    if (!acc.find(source => source.name === feed.source)) {
-      acc.push({ id: feed.source, name: feed.source, url: feed.source });
+    if (!acc.find(source => source.name === feed.user_name)) {
+      acc.push({ id: feed.user_name, name: feed.user_name, url: feed.user_name });
     }
     return acc;
   }, []);
@@ -72,14 +72,14 @@ export const applyFilters = (feeds, filters) => {
   return feeds.filter(feed => {
     // Filter by source
     if (filters.sources && filters.sources.length > 0) {
-      if (!filters.sources.includes(feed.source)) {
+      if (!filters.sources.includes(feed.user_name)) {
         return false;
       }
     }
     
     // Filter by time
     if (filters.timeFilter && filters.timeFilter !== 'all') {
-      if (!isDateInRange(feed.published, filters.timeFilter, filters.startDate, filters.endDate)) {
+      if (!isDateInRange(feed.timestamp, filters.timeFilter, filters.startDate, filters.endDate)) {
         return false;
       }
     }

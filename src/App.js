@@ -312,14 +312,14 @@ function App() {
                   ) : (
                     <div className="checkbox-group">
                       {rssSources.map((source) => (
-                        <label key={source.name} className="checkbox-label">
+                        <label key={source.user_name} className="checkbox-label">
                           <input
                             type="checkbox"
-                            checked={selectedSources.includes(source.name)}
-                            onChange={() => handleSourceToggle(source.name)}
+                            checked={selectedSources.includes(source.user_name)}
+                            onChange={() => handleSourceToggle(source.user_name)}
                           />
                           <span className="checkmark"></span>
-                          {source.name}
+                          {source.user_name}
                         </label>
                       ))}
                     </div>
@@ -473,11 +473,11 @@ function App() {
                 ) : (
                   <ul>
                     {rssSources.map((source) => (
-                      <li key={source.name} className="source-item">
-                        <span className="source-url">{source.name}</span>
-                        <button 
+                      <li key={source.user_name} className="source-item">
+                        <span className="source-url">{source.user_name}</span>
+                        <button     
                           className="delete-btn"
-                          onClick={() => deleteRssSource(source.name)}
+                          onClick={() => deleteRssSource(source.user_name)}
                         >
                           Delete
                         </button>
